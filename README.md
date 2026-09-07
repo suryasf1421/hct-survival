@@ -44,6 +44,55 @@ ruff check src tests        # lint
 
 ---
 
+## Results
+
+Ten-fold out-of-fold predictions over all 28,800 training patients, CPU only.
+
+| Model | C-index | Equity score | Race-group std | RMSE |
+|---|---|---|---|---|
+| **Ensemble** | **0.6874** | **0.6775** | **0.0083** | 0.2295 |
+| LightGBM | 0.6870 | 0.6766 | 0.0087 | 0.1923 |
+| XGBoost (one-hot) | 0.6838 | 0.6742 | 0.0078 | 0.1933 |
+| XGBoost (deep, native categorical) | 0.6835 | 0.6737 | 0.0082 | 0.1931 |
+| HistGradientBoosting | 0.6783 | 0.6689 | 0.0078 | 0.1945 |
+| Random forest | 0.6626 | 0.6540 | 0.0080 | 0.1989 |
+
+The ensemble's RMSE is higher than its components' by construction: rank
+averaging then quantile calibration reproduces the target's *marginal*
+distribution rather than shrinking toward its mean, which is what buys the
+individual regressors their low RMSE. RMSE against a Kaplan–Meier
+pseudo-target is a diagnostic here, not the objective; the C-index is.
+
+| Race group | n | C-index |
+|---|---|---|
+| Asian | 4,832 | 0.6992 |
+| American Indian or Alaska Native | 4,790 | 0.6930 |
+| More than one race | 4,845 | 0.6878 |
+| Black or African-American | 4,795 | 0.6795 |
+| White | 4,831 | 0.6776 |
+| Native Hawaiian or other Pacific Islander | 4,707 | 0.6775 |
+
+### Corrected pipeline versus the published configuration
+
+Both rows are ten-fold runs of this code on the same data; the only
+difference is the flags.
+
+| Configuration | Mean C-index | Race-group std | Equity score |
+|---|---|---|---|
+| Published (`--leaky-target --no-rank-average --no-weight-search --no-stratify`) | 0.6845 | 0.0081 | 0.6765 |
+| Corrected (defaults) | 0.6858 | 0.0083 | **0.6775** |
+| Paper as reported | 0.6853 | 0.0088 | — |
+
+The legacy configuration reproduces the paper to within 0.001, which is a
+useful check that the rewrite did not change the method. The corrected
+pipeline is then slightly *better* on both discrimination and the equity
+score — while also having removed the target leakage that was flattering the
+original number. Fitted blend weights concentrate on LightGBM (0.52), XGBoost
+(0.24) and deep XGBoost (0.19), with the random forest at 0.05 and the
+histogram booster dropped entirely, which the equal-weight mean could not do.
+
+---
+
 ## Method
 
 **Target.** The marginal Kaplan–Meier curve is estimated on the training rows
